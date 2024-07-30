@@ -20,7 +20,7 @@ class QueryUnderstandingModule():
         self.feature_extractor = self._create_feature_extractor()
     
     def _create_model(self):
-        model = ItemClassificationModel(self.backbone, self.pretrained, self.device).get_model()
+        model = ItemClassificationModel(self.backbone, self.pretrained).get_model()
         if self.checkpoint_path:
             model.load_state_dict(torch.load(self.checkpoint_path, map_location=torch.device(self.device)), strict=False)
         return model
@@ -63,3 +63,8 @@ class QueryUnderstandingModule():
     
     def forward(self, x):
         return self._get_embeddings(x), self._get_category(x)
+    
+    
+if __name__ == "__main__":
+    query_understanding_module = QueryUnderstandingModule(device="cpu")
+    print(query_understanding_module.forward(torch.rand(1, 3, 224, 224)))
