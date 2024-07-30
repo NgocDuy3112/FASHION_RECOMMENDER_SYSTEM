@@ -11,7 +11,7 @@ def main():
     with big_columns[0]:
         upload = st.file_uploader("Upload an item for recommendation")
     with big_columns[1]:
-        n_items = st.slider("How many items do you want from a combination?", 3, 5, 4)
+        n_items = st.slider("How many items do you want from a combination?", 3, 5, 5)
         k = st.slider("How many combinations do you want to generate?", 3, 10, 4)
         generate = st.button("Generate")
         
@@ -24,8 +24,7 @@ def main():
         else:
             st.subheader("Here are recommended combinations might be suitable for you")
             pipeline = RecommendationPipeline()
-            recommended_outfits = pipeline.recommend(image, n_items, k)
-            main_category = pipeline.get_category(image)
+            recommended_outfits = pipeline.recommend("test", image, n_items, k)
             for outfit in recommended_outfits:
                 columns = st.columns([1, 1, 1, 1, 1])
                 with columns[0]:
@@ -39,7 +38,7 @@ def main():
                 #         st.image(img, width=col_width)
                 for i, item in enumerate(outfit):
                     with columns[(i + 1) % num_cols]:
-                        img = Image.open(os.path.join("../../itemsdb", item[0]))
+                        img = Image.open(os.path.join("../../testdb", item[0]))
                         img = img.resize((img_display_size, img_display_size))
                         st.image(img, width=col_width)
     
