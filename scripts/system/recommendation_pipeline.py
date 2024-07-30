@@ -1,7 +1,7 @@
 from query_understanding import *
 from categories_recommendation import *
 from items_database import *
-from scoring import *
+from reranking import *
 from helper import *
 from heapq import nlargest
 
@@ -10,9 +10,9 @@ class RecommendationPipeline():
         self.query_understanding = QueryUnderstandingModule(device="cpu", embedding_size=512)
         self.category_recommendation = CategoryRecommendationModule()
         self.database = ItemsDatabaseModule()
-        self.scoring = ScoringModule(device="cpu")
+        self.scoring = RerankingModule(device="cpu")
         
-    def recommend(self, item_image, n_items, k=2):
+    def recommend(self, table_name, item_image, n_items, k=2):
         outfits = []
         candidated_combos = []
         if item_image is None: return None
@@ -20,12 +20,13 @@ class RecommendationPipeline():
         recommended_categories = self._recommend_categories(main_category, n_items-1, k)
         for category_list in recommended_categories:
             # Query database for similar items
-            candidate_items_dict = self._query_database_multiple_categories(embedding, category_list)
+            candidate_items_dict = self._query_database_multiple_categories(table_name, embedding, category_list)
             candidated_combos.extend(self._generate_combinations(candidate_items_dict))
         best_combos = self._get_best_combos(embedding, candidated_combos, k)
         for best_combo in best_combos:
             outfit = [(category + "/" + image_path, category) for image_path, category, _ in best_combo]
             outfits.append(outfit)
+        self.close()
         return outfits
         
     def get_category(self, image):
@@ -46,22 +47,22 @@ class RecommendationPipeline():
     
     # Step 3: Query similar images
     ## First, we write a function to query for each category
-    def _query_database_one_category(self, image_embedding, category, n_items=10):
+    def _query_database_one_category(self, table_name, image_embedding, category, n_items=10):
         query = f"""
             SELECT image, category, embedding
-            FROM items
+            FROM {table_name}
             WHERE category = '{category}'
-            ORDER BY 1 - (embedding <=> '{add_commas(image_embedding)}')
+            ORDER BY embedding <-> '{add_commas(image_embedding)}'
             LIMIT {n_items}
         """
         results = self.database.query(query)
         return results
     
     ## Then, we write a function to query for multiple categories
-    def _query_database_multiple_categories(self, image_embedding, categories, n_items=10):
+    def _query_database_multiple_categories(self, table_name, image_embedding, categories, n_items=10):
         candidate_items_dict = {}
         for category in categories:
-            candidate_items_dict[category] = self._query_database_one_category(image_embedding, category, n_items=n_items)
+            candidate_items_dict[category] = self._query_database_one_category(table_name, image_embedding, category, n_items=n_items)
         return candidate_items_dict
     
     def _generate_combinations(self, candidate_items_dict):
@@ -76,4 +77,7 @@ class RecommendationPipeline():
             score = self.scoring.score(embeddings)
             scored_combos.append((score, combo))
         best_combos = nlargest(k, scored_combos, key=lambda x: x[0])
-        return [combo for score, combo in best_combos]
+        return [combo for _, combo in best_combos]
+    
+    def close(self):
+        self.database.close()
