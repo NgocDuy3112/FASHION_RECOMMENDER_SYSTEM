@@ -1,11 +1,10 @@
 from __init__ import *
 
 class ItemClassificationModel(nn.Module):
-    def __init__(self, backbone="vit_base", pretrained=True, device=DEVICE):
+    def __init__(self, backbone="vit_base", pretrained=True):
         super(ItemClassificationModel, self).__init__()
         self.backbone = backbone
         self.pretrained = pretrained
-        self.device = device
         self.model = self._create_model()
         
     def _create_backbone(self):
@@ -43,18 +42,18 @@ class ItemClassificationModel(nn.Module):
         
         if self.backbone == "vit_base": _model.heads = classifier
         if self.backbone == "resnet50": _model.fc = classifier
-        return _model.to(self.device)
+        return _model
     
     def get_model(self):
         return self.model
     
     def forward(self, x):
-        return self.model(x)
+        return self.model(x)    
     
     
-class OutfitClassificationModel(nn.Module):
-    def __init__(self, device=DEVICE, input_size=2560, hidden_size=64, dropout_rate=0.1):
-        super(OutfitClassificationModel, self).__init__()
+class OutfitClassificationMLPModel(nn.Module):
+    def __init__(self, input_size=2560, hidden_size=64, dropout_rate=0.1):
+        super(OutfitClassificationMLPModel, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(input_size, hidden_size),
             nn.ReLU(),
@@ -64,7 +63,40 @@ class OutfitClassificationModel(nn.Module):
 
     def forward(self, x):
         out = self.model(x)
-        return out.squeeze(1)
+        # return out.squeeze(1)
+        return out
+    
+    def get_model(self):
+        return self.model
+    
+    
+class OutfitClassificationBiLSTMModel(nn.Module):
+    def __init__(self, input_size=512, hidden_size=64, num_classes=1, device="cpu"):
+        super(OutfitClassificationBiLSTMModel, self).__init__()
+        self.hidden_size = hidden_size
+        self.bilstm = nn.LSTM(input_size, hidden_size, bidirectional=True, batch_first=True)
+        self.fc = nn.Linear(hidden_size * 2, num_classes)
+        self.device = device
+    
+    def forward(self, x, mask):
+        # Apply mask to ignore zeros
+        x = x * mask.unsqueeze(2)
+        
+        # Get lengths of non-padded sequences and move to CPU
+        lengths = mask.sum(dim=1).int().cpu()
+        
+        # Pack padded sequence
+        packed_input = nn.utils.rnn.pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
+        packed_output, (_, _) = self.bilstm(packed_input)
+        
+        # Unpack sequence
+        lstm_out, _ = nn.utils.rnn.pad_packed_sequence(packed_output, batch_first=True)
+        
+        # Take the last hidden state for classification
+        last_hidden_states = lstm_out[torch.arange(lstm_out.size(0)), lengths - 1, :].to(self.device)
+        
+        out = self.fc(last_hidden_states)
+        return out
     
     def get_model(self):
         return self.model
